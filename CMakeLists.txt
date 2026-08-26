@@ -47,6 +47,9 @@ enable_testing()
 
 add_executable(http_request_tests
     tests/HttpRequestTests.cpp
+    tests/HttpResponseTests.cpp
+    tests/RouterTests.cpp
+    tests/ConnectionTests.cpp
 )
 
 target_link_libraries(http_request_tests
