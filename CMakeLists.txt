@@ -11,6 +11,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(cpp_server
     src/main.cpp
+    
+    src/http/HttpRequest.cpp
+    src/http/HttpResponse.cpp
+    src/http/HttpUtils.cpp
+    src/http/Router.cpp
+
+    src/networking/Connection.cpp
+
+    src/threadpool/ThreadPool.cpp
 )
 
 target_include_directories(cpp_server
