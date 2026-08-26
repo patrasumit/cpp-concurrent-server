@@ -1,11 +1,16 @@
 #include "http/HttpRequest.h"
 #include "http/HttpResponse.h"
 #include "http/Router.h"
+#include "networking/Connection.h"
 
+#include <gtest/gtest.h>
+
+#include <sys/socket.h>
+#include <unistd.h>
 #include <cassert>
 #include <iostream>
 
-void testValidGetRequest()
+TEST(HttpRequest, ValidGetRequest)
 {
     const std::string raw_request =
         "GET /hello HTTP/1.1\r\n"
@@ -17,15 +22,16 @@ void testValidGetRequest()
     bool result =
         parseRequest(raw_request, request);
 
-    assert(result);
-    assert(request.method == "GET");
-    assert(request.path == "/hello");
-    assert(request.version == "HTTP/1.1");
-    assert(request.headers.at("host") == "localhost");
-    assert(request.body.empty());
+    EXPECT_TRUE(result);
+
+    EXPECT_EQ(request.method, "GET");
+    EXPECT_EQ(request.path, "/hello");
+    EXPECT_EQ(request.version, "HTTP/1.1");
+    EXPECT_EQ(request.headers.at("host"), "localhost");
+    EXPECT_TRUE(request.body.empty());
 }
 
-void testMalformedRequestLine()
+TEST(HttpRequest, MalformedRequestLine)
 {
     const std::string raw_request =
         "GET /hello\r\n"
@@ -37,10 +43,10 @@ void testMalformedRequestLine()
     bool result =
         parseRequest(raw_request, request);
 
-    assert(!result);
+    EXPECT_FALSE(result);
 }
 
-void testResponseSerialization()
+TEST(HttpResponse, Serialization)
 {
     HttpResponse response{
         200,
@@ -55,55 +61,57 @@ void testResponseSerialization()
     std::string raw_response =
         serializeResponse(response);
 
-    assert(
-        raw_response.find("HTTP/1.1 200 OK\r\n")
-        != std::string::npos
+    EXPECT_NE(
+        raw_response.find("HTTP/1.1 200 OK\r\n"),
+        std::string::npos
     );
 
-    assert(
-        raw_response.find("Content-type: text/plain\r\n")
-        != std::string::npos
+    EXPECT_NE(
+        raw_response.find("Content-type: text/plain\r\n"),
+        std::string::npos
     );
 
-    assert(
-        raw_response.find("Connection: keep-alive\r\n")
-        != std::string::npos
+    EXPECT_NE(
+        raw_response.find("Connection: keep-alive\r\n"),
+        std::string::npos
     );
 
-    assert(
-        raw_response.find("Content-Length: 15\r\n")
-        != std::string::npos
+    EXPECT_NE(
+        raw_response.find("Content-Length: 15\r\n"),
+        std::string::npos
     );
 
-    assert(
-        raw_response.find("\r\n\r\nHello, client!\n")
-        != std::string::npos
+    EXPECT_NE(
+        raw_response.find("\r\n\r\nHello, client!\n"),
+        std::string::npos
     );
 }
 
-void testPostRequest()
+TEST(HttpRequest, PostRequest)
 {
     const std::string raw_request =
         "POST /hello HTTP/1.1\r\n"
         "Host: localhost\r\n"
-        "Content-Length: 5\r\n"
+        "Content-Length: 11\r\n"
         "\r\n"
-        "Hello";
+        "Hello World";
 
     HttpRequest request;
 
     bool result =
         parseRequest(raw_request, request);
 
-    assert(result);
-    assert(request.method == "POST");
-    assert(request.path == "/hello");
-    assert(request.version == "HTTP/1.1");
-    assert(request.headers.at("host") == "localhost");
-    assert(request.body == "Hello");
+    EXPECT_TRUE(result);
+
+    EXPECT_EQ(request.method, "POST");
+    EXPECT_EQ(request.path, "/hello");
+    EXPECT_EQ(request.version, "HTTP/1.1");
+    EXPECT_EQ(request.headers.at("host"), "localhost");
+    EXPECT_EQ(request.headers.at("content-length"), "11");
+    EXPECT_EQ(request.body, "Hello World");
 }
 
-void testUnsupportedHttpVersion()
+TEST(HttpRequest, UnsupportedHttpVersion)
 {
     const std::string raw_request =
         "GET /hello HTTP/1.0\r\n"
@@ -115,10 +123,10 @@ void testUnsupportedHttpVersion()
     bool result =
         parseRequest(raw_request, request);
 
-    assert(!result);
+    EXPECT_FALSE(result);
 }
 
-void testMalformedHeader()
+TEST(HttpRequest, MalformedHeader)
 {
     const std::string raw_request =
         "GET /hello HTTP/1.1\r\n"
@@ -131,29 +139,29 @@ void testMalformedHeader()
     bool result =
         parseRequest(raw_request, request);
 
-    assert(!result);
+    EXPECT_FALSE(result);
 }
 
-void testDefaultKeepAlive()
+TEST(HttpRequest, DefaultKeepAlive)
 {
     HttpRequest request;
 
     request.version = "HTTP/1.1";
 
-    assert(shouldKeepAlive(request));
+    EXPECT_TRUE(shouldKeepAlive(request));
 }
 
-void testConnectionClose()
+TEST(HttpRequest, ConnectionClose)
 {
     HttpRequest request;
 
     request.version = "HTTP/1.1";
     request.headers["connection"] = "close";
 
-    assert(!shouldKeepAlive(request));
+    EXPECT_FALSE(shouldKeepAlive(request));
 }
 
-void testRouteGetHello()
+TEST(Router, GetHello)
 {
     HttpRequest request;
 
@@ -164,12 +172,12 @@ void testRouteGetHello()
     HttpResponse response =
         routeRequest(request);
 
-    assert(response.statusCode == 200);
-    assert(response.statusText == "OK");
-    assert(response.body == "Hello, client!\n");
+    EXPECT_EQ(response.statusCode, 200);
+    EXPECT_EQ(response.statusText, "OK");
+    EXPECT_EQ(response.body, "Hello, client!\n");
 }
 
-void testRouteMethodNotAllowed()
+TEST(Router, MethodNotAllowed)
 {
     HttpRequest request;
 
@@ -180,13 +188,21 @@ void testRouteMethodNotAllowed()
     HttpResponse response =
         routeRequest(request);
 
-    assert(response.statusCode == 405);
-    assert(response.statusText == "Method Not Allowed");
-    assert(response.headers.at("Allow").find("GET") != std::string::npos);
-    assert(response.headers.at("Allow").find("POST") != std::string::npos);
+    EXPECT_EQ(response.statusCode, 405);
+    EXPECT_EQ(response.statusText, "Method Not Allowed");
+
+    EXPECT_NE(
+        response.headers.at("Allow").find("GET"),
+        std::string::npos
+    );
+
+    EXPECT_NE(
+        response.headers.at("Allow").find("POST"),
+        std::string::npos
+    );
 }
 
-void testRouteNotFound()
+TEST(Router, NotFound)
 {
     HttpRequest request;
 
@@ -197,24 +213,156 @@ void testRouteNotFound()
     HttpResponse response =
         routeRequest(request);
 
-    assert(response.statusCode == 404);
-    assert(response.statusText == "Not Found");
-    assert(response.body == "Resource not found\n");
+    EXPECT_EQ(response.statusCode, 404);
+    EXPECT_EQ(response.statusText, "Not Found");
+    EXPECT_EQ(response.body, "Resource not found\n");
 }
 
-int main()
+TEST(Connection, ReceiveRequest)
 {
-    testValidGetRequest();
-    testMalformedRequestLine();
-    testResponseSerialization();
-    testPostRequest();
-    testUnsupportedHttpVersion();
-    testMalformedHeader();
-    testDefaultKeepAlive();
-    testConnectionClose();
-    testRouteGetHello();
-    testRouteMethodNotAllowed();
-    testRouteNotFound();
+    int fds[2];
 
-    std::cout << "All tests passed!\n";
+    ASSERT_EQ(
+        socketpair(AF_UNIX, SOCK_STREAM, 0, fds),
+        0
+    );
+
+    const std::string raw_request =
+        "GET /hello HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "\r\n";
+
+    ssize_t bytes_sent =
+        send(
+            fds[0],
+            raw_request.data(),
+            raw_request.size(),
+            0
+        );
+
+    ASSERT_EQ(
+        bytes_sent,
+        static_cast<ssize_t>(raw_request.size())
+    );
+
+    Connection connection(fds[1]);
+
+    std::string received_request;
+
+    ReceiveResult result =
+        connection.receiveRequest(received_request);
+
+    EXPECT_EQ(result, ReceiveResult::Success);
+    EXPECT_EQ(received_request, raw_request);
+
+    close(fds[0]);
+}
+
+TEST(Connection, ReceivePartialBody)
+{
+    int fds[2];
+
+    ASSERT_EQ(
+        socketpair(AF_UNIX, SOCK_STREAM, 0, fds),
+        0
+    );
+
+    const std::string request_part1 =
+        "POST /hello HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "Content-Length: 11\r\n"
+        "\r\n"
+        "Hello";
+
+    const std::string request_part2 =
+        " World";
+
+    ASSERT_EQ(
+        send(
+            fds[0],
+            request_part1.data(),
+            request_part1.size(),
+            0
+        ),
+        static_cast<ssize_t>(request_part1.size())
+    );
+
+    ASSERT_EQ(
+        send(
+            fds[0],
+            request_part2.data(),
+            request_part2.size(),
+            0
+        ),
+        static_cast<ssize_t>(request_part2.size())
+    );
+
+    Connection connection(fds[1]);
+
+    std::string received_request;
+
+    ReceiveResult result =
+        connection.receiveRequest(received_request);
+
+    EXPECT_EQ(result, ReceiveResult::Success);
+
+    EXPECT_EQ(
+        received_request,
+        request_part1 + request_part2
+    );
+
+    close(fds[0]);
+}
+
+TEST(Connection, MultipleRequests)
+{
+    int fds[2];
+
+    ASSERT_EQ(
+        socketpair(AF_UNIX, SOCK_STREAM, 0, fds),
+        0
+    );
+
+    const std::string request1 =
+        "GET /hello HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "\r\n";
+
+    const std::string request2 =
+        "GET /status HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "\r\n";
+
+    const std::string combined =
+        request1 + request2;
+
+    ASSERT_EQ(
+        send(
+            fds[0],
+            combined.data(),
+            combined.size(),
+            0
+        ),
+        static_cast<ssize_t>(combined.size())
+    );
+
+    Connection connection(fds[1]);
+
+    std::string received_request;
+
+    ReceiveResult result =
+        connection.receiveRequest(received_request);
+
+    ASSERT_EQ(result, ReceiveResult::Success);
+    EXPECT_EQ(received_request, request1);
+
+    received_request.clear();
+
+    result =
+        connection.receiveRequest(received_request);
+
+    EXPECT_EQ(result, ReceiveResult::Success);
+    EXPECT_EQ(received_request, request2);
+
+    close(fds[0]);
 }

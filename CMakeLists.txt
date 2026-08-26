@@ -5,6 +5,15 @@ project(CppConcurrentServer
     LANGUAGES CXX
 )
 
+include(FetchContent)
+
+FetchContent_Declare(
+    googletest
+    URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
+)
+
+FetchContent_MakeAvailable(googletest)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -43,9 +52,9 @@ add_executable(http_request_tests
 target_link_libraries(http_request_tests
     PRIVATE
         server_core
+        GTest::gtest_main
 )
 
-add_test(
-    NAME HttpRequestTests
-    COMMAND http_request_tests
-)
+include(GoogleTest)
+
+gtest_discover_tests(http_request_tests)
