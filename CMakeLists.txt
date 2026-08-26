@@ -24,6 +24,8 @@ add_library(server_core
     src/http/HttpUtils.cpp
     src/http/Router.cpp
 
+    src/server/Server.cpp
+
     src/networking/Connection.cpp
 
     src/threadpool/ThreadPool.cpp
@@ -50,6 +52,8 @@ add_executable(http_request_tests
     tests/HttpResponseTests.cpp
     tests/RouterTests.cpp
     tests/ConnectionTests.cpp
+    tests/ThreadPoolTests.cpp
+    tests/ServerTests.cpp
 )
 
 target_link_libraries(http_request_tests
