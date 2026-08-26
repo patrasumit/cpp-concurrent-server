@@ -9,9 +9,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_executable(cpp_server
-    src/main.cpp
-    
+add_library(server_core
     src/http/HttpRequest.cpp
     src/http/HttpResponse.cpp
     src/http/HttpUtils.cpp
@@ -22,7 +20,32 @@ add_executable(cpp_server
     src/threadpool/ThreadPool.cpp
 )
 
-target_include_directories(cpp_server
-    PRIVATE
+target_include_directories(server_core
+    PUBLIC
         ${PROJECT_SOURCE_DIR}/include
+)
+
+add_executable(cpp_server
+    src/main.cpp
+)
+
+target_link_libraries(cpp_server
+    PRIVATE
+        server_core
+)
+
+enable_testing()
+
+add_executable(http_request_tests
+    tests/HttpRequestTests.cpp
+)
+
+target_link_libraries(http_request_tests
+    PRIVATE
+        server_core
+)
+
+add_test(
+    NAME HttpRequestTests
+    COMMAND http_request_tests
 )
