@@ -15,12 +15,23 @@
 // Maximum Size of Request that we need to handle
 constexpr size_t MAX_REQUEST_SIZE = 1024 * 1024; // 1 MB
 
-Connection::Connection(int client_fd)
+Connection::Connection(
+    int client_fd,
+    std::chrono::milliseconds receive_timeout
+)
     : client_fd(client_fd)
 {
     timeval timeout{};
-    timeout.tv_sec = 10;
-    timeout.tv_usec = 0;
+
+    timeout.tv_sec =
+        std::chrono::duration_cast<std::chrono::seconds>(
+            receive_timeout
+        ).count();
+
+    timeout.tv_usec =
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            receive_timeout % std::chrono::seconds(1)
+        ).count();
 
     if (setsockopt(
             client_fd,
@@ -149,8 +160,8 @@ ReceiveResult Connection::receiveRequest(std::string& raw_request)
                 }
             }
 
-            std::cout << "Header: [" << name << "] = [" << value << "]\n";
-            std::cout << "Content-Length = " << content_length << "\n";
+            // std::cout << "Header: [" << name << "] = [" << value << "]\n";
+            // std::cout << "Content-Length = " << content_length << "\n";
 
         }
 
@@ -233,7 +244,7 @@ bool Connection::sendResponse(const std::string& raw_response)
             client_fd,
             raw_response.data() + total_sent,
             raw_response.size() - total_sent,
-            0
+            MSG_NOSIGNAL
         );
 
         if (bytes_sent < 0)

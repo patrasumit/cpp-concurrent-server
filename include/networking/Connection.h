@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <string>
 
 enum class ReceiveResult
@@ -15,7 +16,11 @@ enum class ReceiveResult
 class Connection
 {
 public:
-    explicit Connection(int client_fd);
+    explicit Connection(
+        int client_fd,
+        std::chrono::milliseconds receive_timeout =
+            std::chrono::seconds(10)
+    );
     ~Connection();
 
     Connection(const Connection&) = delete; // Delete the copy constructor
