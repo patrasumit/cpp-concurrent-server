@@ -69,28 +69,28 @@ TEST(ThreadPool, ExecutesTasksConcurrently)
 
     std::atomic<int> active_tasks{0};
     std::atomic<int> max_active_tasks{0};
+    std::atomic<int> started_tasks{0};
 
     auto task = [&]()
     {
-        int current =
-            ++active_tasks;
+        int current = ++active_tasks;
 
-        int previous =
-            max_active_tasks.load();
+        int previous = max_active_tasks.load();
 
         while (
             current > previous &&
             !max_active_tasks.compare_exchange_weak(
                 previous,
-                current
-            )
-        )
+                current))
         {
         }
 
+        ++started_tasks;
+
+        // Keep both workers busy long enough for
+        // the other worker to start.
         std::this_thread::sleep_for(
-            std::chrono::milliseconds(100)
-        );
+            std::chrono::milliseconds(100));
 
         --active_tasks;
     };
@@ -98,20 +98,28 @@ TEST(ThreadPool, ExecutesTasksConcurrently)
     ASSERT_TRUE(pool.enqueue(task));
     ASSERT_TRUE(pool.enqueue(task));
 
-    // Wait until both tasks have completed.
-    for (
-        int i = 0;
-        i < 100 &&
-        active_tasks.load() != 0;
-        ++i
-    )
+    // Wait until both tasks have actually started.
+    for (int i = 0;
+         i < 100 && started_tasks.load() < 2;
+         ++i)
     {
         std::this_thread::sleep_for(
-            std::chrono::milliseconds(10)
-        );
+            std::chrono::milliseconds(5));
     }
 
+    EXPECT_EQ(started_tasks.load(), 2);
     EXPECT_EQ(max_active_tasks.load(), 2);
+
+    // Wait for both tasks to finish.
+    for (int i = 0;
+         i < 100 && active_tasks.load() != 0;
+         ++i)
+    {
+        std::this_thread::sleep_for(
+            std::chrono::milliseconds(5));
+    }
+
+    EXPECT_EQ(active_tasks.load(), 0);
 }
 
 TEST(ThreadPool, WorkerSurvivesTaskException)

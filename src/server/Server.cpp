@@ -103,24 +103,34 @@ void Server::setupSocket()
 
     int opt = 1;
 
-    setsockopt(
-        server_fd,
-        SOL_SOCKET,
-        SO_REUSEADDR,
-        &opt,
-        sizeof(opt)
-    );
+    if (setsockopt(
+            server_fd,
+            SOL_SOCKET,
+            SO_REUSEADDR,
+            &opt,
+            sizeof(opt)) < 0)
+    {
+        close(server_fd);
+        server_fd = -1;
+
+        throw std::runtime_error("setsockopt failed");
+    }
 
     sockaddr_in server_address{};
 
     server_address.sin_family = AF_INET;
     server_address.sin_port = htons(port);
 
-    inet_pton(
-        AF_INET,
-        "127.0.0.1",
-        &server_address.sin_addr
-    );
+    if (inet_pton(
+            AF_INET,
+            "127.0.0.1",
+            &server_address.sin_addr) <= 0)
+    {
+        close(server_fd);
+        server_fd = -1;
+
+        throw std::runtime_error("Invalid server address");
+    }
 
     if (bind(
             server_fd,
