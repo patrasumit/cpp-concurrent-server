@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <csignal>
 #include <cerrno>
+#include <cstring>
 
 namespace
 {
@@ -140,7 +141,9 @@ void Server::setupSocket()
         close(server_fd);
         server_fd = -1;
 
-        throw std::runtime_error("Bind failed");
+        throw std::runtime_error(
+            std::string("bind failed: ") + std::strerror(errno)
+        );
     }
 
     if (listen(server_fd, 10) < 0)
