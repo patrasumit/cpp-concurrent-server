@@ -3,6 +3,7 @@
 #include "http/HttpResponse.h"
 #include "http/Router.h"
 #include "networking/Connection.h"
+#include "logging/Logger.h"
 
 #include <iostream>
 #include <sys/socket.h>
@@ -65,13 +66,31 @@ void Server::run()
         {
             if (errno == EINTR && !server_running)
             {
-                std::cout << "Shutdown requested\n";
+                Logger::instance().info("Shutdown requested");
                 break;
             }
 
-            std::cout << "Accept failed!\n";
+            int error = errno;
+
+            Logger::instance().error(
+                std::string("Accept failed: ") +
+                std::strerror(error)
+            );
             continue;
         }
+
+        char client_ip[INET_ADDRSTRLEN]{};
+
+        inet_ntop(
+            AF_INET,
+            &client_address.sin_addr,
+            client_ip,
+            sizeof(client_ip)
+        );
+
+        Logger::instance().info(
+            std::string("Client connected: ") + client_ip
+        );
 
         if (!pool.enqueue([this, client_fd]
             {
@@ -99,7 +118,17 @@ void Server::setupSocket()
 
     if (server_fd < 0)
     {
-        throw std::runtime_error("Socket creation failed");
+        int error = errno;
+
+        Logger::instance().error(
+            std::string("Socket creation failed: ") +
+            std::strerror(error)
+        );
+
+        throw std::runtime_error(
+            std::string("Socket creation failed: ") +
+            std::strerror(error)
+        );
     }
 
     int opt = 1;
@@ -111,10 +140,20 @@ void Server::setupSocket()
             &opt,
             sizeof(opt)) < 0)
     {
+        int error = errno;
+
+        Logger::instance().error(
+            std::string("setsockopt failed: ") +
+            std::strerror(error)
+        );
+
         close(server_fd);
         server_fd = -1;
 
-        throw std::runtime_error("setsockopt failed");
+        throw std::runtime_error(
+            std::string("setsockopt failed: ") +
+            std::strerror(error)
+        );
     }
 
     sockaddr_in server_address{};
@@ -138,20 +177,38 @@ void Server::setupSocket()
             reinterpret_cast<sockaddr*>(&server_address),
             sizeof(server_address)) < 0)
     {
+        int error = errno;
+
+        Logger::instance().error(
+            std::string("Bind failed: ") +
+            std::strerror(error)
+        );
+
         close(server_fd);
         server_fd = -1;
 
         throw std::runtime_error(
-            std::string("bind failed: ") + std::strerror(errno)
+            std::string("Bind failed: ") +
+            std::strerror(error)
         );
     }
 
     if (listen(server_fd, 10) < 0)
     {
+        int error = errno;
+
+        Logger::instance().error(
+            std::string("Listen failed: ") +
+            std::strerror(error)
+        );
+
         close(server_fd);
         server_fd = -1;
 
-        throw std::runtime_error("Listen failed");
+        throw std::runtime_error(
+            std::string("Listen failed: ") +
+            std::strerror(error)
+        );
     }
 }
 
@@ -217,7 +274,7 @@ void Server::handleClient(int client_fd)
 
             case ReceiveResult::Timeout:
             {   
-                std::cout << "Client receive timeout\n";
+                Logger::instance().warning("Client receive timeout");
                 return;
             }
         }

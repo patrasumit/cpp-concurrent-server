@@ -1,4 +1,5 @@
 #include "networking/Connection.h"
+#include "logging/Logger.h"
 
 #include <iostream>
 #include <sstream>
@@ -102,7 +103,7 @@ ReceiveResult Connection::receiveRequest(std::string& raw_request)
 
             if (bytes_received == 0)
             {
-                std::cout << "Client closed connection\n";
+                Logger::instance().info("Client closed Connection");
                 return ReceiveResult::ClientClosed;
             }
 
@@ -206,7 +207,7 @@ ReceiveResult Connection::receiveRequest(std::string& raw_request)
 
             if (bytes_received == 0)
             {
-                std::cout << "Client closed connection\n";
+                Logger::instance().info("Client closed Connection");
                 return ReceiveResult::ClientClosed;
             }
 
@@ -273,6 +274,6 @@ Connection::~Connection()
     if (client_fd != -1)
     {
         close(client_fd);
-        std::cout << "Closing client connection\n";
+        Logger::instance().info("Closing client connection");
     }
 }

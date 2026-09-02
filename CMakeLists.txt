@@ -29,6 +29,8 @@ add_library(server_core
     src/networking/Connection.cpp
 
     src/threadpool/ThreadPool.cpp
+
+    src/logging/Logger.cpp
 )
 
 target_include_directories(server_core
@@ -47,16 +49,17 @@ target_link_libraries(cpp_server
 
 enable_testing()
 
-add_executable(http_request_tests
+add_executable(cpp_server_tests
     tests/HttpRequestTests.cpp
     tests/HttpResponseTests.cpp
     tests/RouterTests.cpp
     tests/ConnectionTests.cpp
     tests/ThreadPoolTests.cpp
     tests/ServerTests.cpp
+    tests/LoggerTests.cpp
 )
 
-target_link_libraries(http_request_tests
+target_link_libraries(cpp_server_tests
     PRIVATE
         server_core
         GTest::gtest_main
@@ -64,4 +67,4 @@ target_link_libraries(http_request_tests
 
 include(GoogleTest)
 
-gtest_discover_tests(http_request_tests)
+gtest_discover_tests(cpp_server_tests)
