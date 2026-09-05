@@ -1,7 +1,17 @@
 #include "threadpool/ThreadPool.h"
-#include <iostream>
+#include "logging/Logger.h"
+
+#include <stdexcept>
 
 ThreadPool::ThreadPool(size_t num_threads){
+
+    if (num_threads == 0)
+    {
+        throw std::invalid_argument(
+            "ThreadPool must have at least one worker"
+        );
+    }
+
     for (size_t i = 0; i < num_threads; ++i)
     {
         workers.emplace_back(&ThreadPool::worker, this);
@@ -45,11 +55,15 @@ void ThreadPool::worker(){
         }
         catch (const std::exception& e)
         {
-            std::cerr << "Task failed: " << e.what() << '\n';
+            Logger::instance().error(
+                std::string("Task failed: ") + e.what()
+            );
         }
         catch (...)
         {
-            std::cerr << "Task failed with unknown exception\n";
+            Logger::instance().error(
+                "Task failed with unknown exception"
+            );
         }
     }
 }

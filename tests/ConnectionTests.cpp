@@ -380,3 +380,42 @@ TEST(Connection, SendResponseFailure)
     );
 }
 
+TEST(Connection, RejectsMalformedHeader)
+{
+    int fds[2];
+
+    ASSERT_EQ(
+        socketpair(AF_UNIX, SOCK_STREAM, 0, fds),
+        0
+    );
+
+    const std::string request =
+        "GET /hello HTTP/1.1\r\n"
+        "Host localhost\r\n"          // malformed: missing ':'
+        "Connection: close\r\n"
+        "\r\n";
+
+    ASSERT_EQ(
+        send(
+            fds[0],
+            request.data(),
+            request.size(),
+            0
+        ),
+        static_cast<ssize_t>(request.size())
+    );
+
+    Connection connection(fds[1]);
+
+    std::string received_request;
+
+    ReceiveResult result =
+        connection.receiveRequest(received_request);
+
+    EXPECT_EQ(
+        result,
+        ReceiveResult::BadRequest
+    );
+
+    close(fds[0]);
+}

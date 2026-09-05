@@ -9,6 +9,9 @@ std::string serializeResponse(const HttpResponse& response)
 
     for (const auto& [name, value] : response.headers)
     {
+        if (toLower(name) == "content-length")
+            continue;
+        
         result += name + ": " + value + "\r\n";
     }
 

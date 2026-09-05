@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include "threadpool/ThreadPool.h"
 
 class Server
@@ -20,4 +21,6 @@ private:
     int port;
 
     ThreadPool pool;
+
+    std::atomic<bool> running{true};
 };

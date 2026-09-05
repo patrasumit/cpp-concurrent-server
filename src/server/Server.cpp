@@ -17,11 +17,11 @@
 
 namespace
 {
-    volatile std::sig_atomic_t server_running = 1;
+    volatile std::sig_atomic_t signal_requested = 0;
 
     void handle_signal(int)
     {
-        server_running = 0;
+        signal_requested = 1;
     }
 }
 
@@ -50,7 +50,7 @@ void Server::run()
 
     sigaction(SIGINT, &sa, nullptr);
 
-    while (server_running)
+    while (running)
     {
         sockaddr_in client_address{};
         socklen_t client_address_len =
@@ -64,9 +64,25 @@ void Server::run()
 
         if (client_fd < 0)
         {
-            if (errno == EINTR && !server_running)
+            if (errno == EINTR)
             {
-                Logger::instance().info("Shutdown requested");
+                if (signal_requested)
+                {
+                    running = false;
+                    Logger::instance().info(
+                        "Shutdown requested"
+                    );
+                    break;
+                }
+
+                continue;
+            }
+
+            if (!running)
+            {
+                Logger::instance().info(
+                    "Server stopped"
+                );
                 break;
             }
 
@@ -81,16 +97,22 @@ void Server::run()
 
         char client_ip[INET_ADDRSTRLEN]{};
 
-        inet_ntop(
-            AF_INET,
-            &client_address.sin_addr,
-            client_ip,
-            sizeof(client_ip)
-        );
-
-        Logger::instance().info(
-            std::string("Client connected: ") + client_ip
-        );
+        if (inet_ntop(
+                AF_INET,
+                &client_address.sin_addr,
+                client_ip,
+                sizeof(client_ip)) == nullptr)
+        {
+            Logger::instance().warning(
+                "Failed to convert client address"
+            );
+        }
+        else
+        {
+            Logger::instance().info(
+                std::string("Client connected: ") + client_ip
+            );
+        }
 
         if (!pool.enqueue([this, client_fd]
             {
@@ -104,7 +126,7 @@ void Server::run()
 
 void Server::stop()
 {
-    server_running = 0;
+    running = false;
 
     if (server_fd >= 0)
     {

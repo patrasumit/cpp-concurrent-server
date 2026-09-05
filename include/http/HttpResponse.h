@@ -2,6 +2,7 @@
 
 #include <string>
 #include <unordered_map>
+#include "http/HttpUtils.h"
 
 struct HttpResponse
 {

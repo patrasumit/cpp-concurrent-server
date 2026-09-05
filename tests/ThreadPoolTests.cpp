@@ -257,3 +257,11 @@ TEST(ThreadPool, DestructorProcessesQueuedTasks)
 //         pool->enqueue([] {})
 //     );
 // }
+
+TEST(ThreadPool, RejectsZeroThreads)
+{
+    EXPECT_THROW(
+        ThreadPool pool(0),
+        std::invalid_argument
+    );
+}

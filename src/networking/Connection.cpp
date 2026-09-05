@@ -1,7 +1,6 @@
 #include "networking/Connection.h"
 #include "logging/Logger.h"
 
-#include <iostream>
 #include <sstream>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -10,6 +9,8 @@
 #include <algorithm>
 #include <cctype>
 #include <sys/time.h>
+#include <cstring>
+#include <stdexcept>
 
 #include "http/HttpUtils.h"
 
@@ -41,7 +42,20 @@ Connection::Connection(
             &timeout,
             sizeof(timeout)) < 0)
     {
-        std::cout << "Failed to set receive timeout\n";
+        int error = errno;
+
+        Logger::instance().error(
+            std::string("Failed to set receive timeout: ") +
+            std::strerror(error)
+        );
+
+        close(client_fd);
+        this->client_fd = -1;
+
+        throw std::runtime_error(
+            std::string("Failed to set receive timeout: ") +
+            std::strerror(error)
+        );
     }
 }
 
@@ -79,7 +93,7 @@ ReceiveResult Connection::receiveRequest(std::string& raw_request)
 
         if (header_end == std::string::npos)
         {
-            int bytes_received = recv(
+            ssize_t bytes_received = recv(
                 client_fd,
                 buffer,
                 sizeof(buffer),
@@ -93,11 +107,14 @@ ReceiveResult Connection::receiveRequest(std::string& raw_request)
 
                 if (errno == EAGAIN || errno == EWOULDBLOCK)
                 {
-                    std::cout << "Receive timeout\n";
+                    Logger::instance().warning("Receive timeout");
                     return ReceiveResult::Timeout;
                 }
 
-                std::cout << "Receive Failed\n";
+                Logger::instance().error(
+                    std::string("Receive failed: ") +
+                    std::strerror(errno)
+                );
                 return ReceiveResult::ReceiveError;
             }
 
@@ -114,7 +131,7 @@ ReceiveResult Connection::receiveRequest(std::string& raw_request)
 
             if (receive_buffer.size() > MAX_REQUEST_SIZE)
             {
-                std::cout << "Request too large\n";
+                Logger::instance().warning("Request too large");
                 return ReceiveResult::RequestTooLarge;
             }
 
@@ -129,6 +146,18 @@ ReceiveResult Connection::receiveRequest(std::string& raw_request)
 
         size_t content_length = 0;
 
+        bool content_length_seen = false;
+
+        // First line is the HTTP request line, not a header.
+        if (!std::getline(ss, line))
+        {
+            Logger::instance().warning(
+                "Missing HTTP request line"
+            );
+
+            return ReceiveResult::BadRequest;
+        }
+
         while (std::getline(ss, line))
         {
             if (!line.empty() && line.back() == '\r')
@@ -137,7 +166,13 @@ ReceiveResult Connection::receiveRequest(std::string& raw_request)
             size_t colon = line.find(':');
 
             if (colon == std::string::npos)
-                continue;
+            {
+                Logger::instance().warning(
+                    "Malformed HTTP header"
+                );
+
+                return ReceiveResult::BadRequest;
+            }
 
             std::string name =
                 toLower(line.substr(0, colon));
@@ -150,13 +185,41 @@ ReceiveResult Connection::receiveRequest(std::string& raw_request)
 
             if (name == "content-length")
             {
+                if (content_length_seen)
+                {
+                    Logger::instance().error(
+                        "Duplicate Content-Length header"
+                    );
+
+                    return ReceiveResult::BadRequest;
+                }
+
+                content_length_seen = true;
+
                 try
                 {
-                    content_length = std::stoul(value);
+                    size_t parsed_chars = 0;
+
+                    size_t parsed_length =
+                        std::stoul(value, &parsed_chars);
+
+                    if (parsed_chars != value.size())
+                    {
+                        Logger::instance().error(
+                            "Invalid Content-Length"
+                        );
+
+                        return ReceiveResult::BadRequest;
+                    }
+
+                    content_length = parsed_length;
                 }
                 catch (const std::exception&)
                 {
-                    std::cout << "Invalid Content-Length\n";
+                    Logger::instance().error(
+                        "Invalid Content-Length"
+                    );
+
                     return ReceiveResult::BadRequest;
                 }
             }
@@ -169,12 +232,21 @@ ReceiveResult Connection::receiveRequest(std::string& raw_request)
         size_t body_start =
             header_end + 4;
 
+        if (content_length > MAX_REQUEST_SIZE - body_start)
+        {
+            Logger::instance().warning(
+                "Request too large"
+            );
+
+            return ReceiveResult::RequestTooLarge;
+        }
+
         size_t request_size =
             body_start + content_length;
 
         if (request_size > MAX_REQUEST_SIZE)
         {
-            std::cout << "Request too large\n";
+            Logger::instance().warning("Request too large");
             return ReceiveResult::RequestTooLarge;
         }
 
@@ -183,7 +255,7 @@ ReceiveResult Connection::receiveRequest(std::string& raw_request)
 
         while (body_received < content_length)
         {
-            int bytes_received = recv(
+            ssize_t bytes_received = recv(
                 client_fd,
                 buffer,
                 sizeof(buffer),
@@ -197,11 +269,14 @@ ReceiveResult Connection::receiveRequest(std::string& raw_request)
 
                 if (errno == EAGAIN || errno == EWOULDBLOCK)
                 {
-                    std::cout << "Receive timeout\n";
+                    Logger::instance().warning("Receive timeout");
                     return ReceiveResult::Timeout;
                 }
 
-                std::cout << "Receive Failed\n";
+                Logger::instance().error(
+                    std::string("Receive failed: ") +
+                    std::strerror(errno)
+                );
                 return ReceiveResult::ReceiveError;
             }
 
@@ -253,13 +328,18 @@ bool Connection::sendResponse(const std::string& raw_response)
             if (errno == EINTR)
                 continue;
 
-            std::cout << "Send failed\n";
+            Logger::instance().error(
+                std::string("Send failed: ") +
+                std::strerror(errno)
+            );
             return false;
         }
 
         if (bytes_sent == 0)
         {
-            std::cout << "Connection closed while sending\n";
+            Logger::instance().warning(
+                "Connection closed while sending"
+            );
             return false;
         }
 

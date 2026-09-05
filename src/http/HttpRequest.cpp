@@ -102,7 +102,7 @@ bool shouldKeepAlive(const HttpRequest& request)
 
     if (it != request.headers.end())
     {
-        if (it->second == "close")
+        if (toLower(it->second) == "close")
         {
             return false;
         }
