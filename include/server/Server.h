@@ -2,11 +2,12 @@
 
 #include <atomic>
 #include "threadpool/ThreadPool.h"
+#include "http/Router.h"
 
 class Server
 {
 public:
-    explicit Server(int port);
+    explicit Server(int port, Router& router);
     ~Server();
 
     void run();
@@ -19,6 +20,8 @@ private:
 
     int server_fd{-1};
     int port;
+
+    Router& router;
 
     ThreadPool pool;
 

@@ -3,117 +3,133 @@
 #include <chrono>
 #include <iostream>
 #include <thread>
-#include <functional>
-#include <unordered_map>
-#include <string>
-#include <vector>
+#include <utility>
 
-using Handler = std::function<HttpResponse(const HttpRequest&)>;
-using RouteKey = std::string;
-using RouteTable =
-    std::unordered_map<
-        std::string,
-        std::unordered_map<std::string, Handler>
-    >;
-
-// Route Table
-RouteTable routes = {
-    {
-        "GET",
-        {
-            {
-                "/",
-                [](const HttpRequest&) {
-                    return HttpResponse{
-                        200,
-                        "OK",
-                        {
-                            {"Content-type", "text/plain"}
-                        },
-                        "Welcome to the C++ Concurrent Server!\n"
-                    };
-                }
-            },
-
-            {
-                "/hello",
-                [](const HttpRequest&) {
-                    return HttpResponse{
-                        200,
-                        "OK",
-                        {
-                            {"Content-type", "text/plain"}
-                        },
-                        "Hello, client!\n"
-                    };
-                }
-            },
-
-            {
-                "/status",
-                [](const HttpRequest&) {
-                    return HttpResponse{
-                        200,
-                        "OK",
-                        {
-                            {"Content-type", "text/plain"}
-                        },
-                        "Server is running!\n"
-                    };
-                }
-            },
-            {
-                "/slow",
-                [](const HttpRequest&) {
-                    std::cout << "Slow request: START\n";
-
-                    std::this_thread::sleep_for(
-                        std::chrono::seconds(5)
-                    );
-
-                    std::cout << "Slow request: END\n";
-
-                    return HttpResponse{
-                        200,
-                        "OK",
-                        {
-                            {"Content-type", "text/plain"}
-                        },
-                        "Slow request completed!\n"
-                    };
-                }
-            }
-        }
-    },
-    {
-        "POST",
-        {
-            {
-                "/hello",
-                [](const HttpRequest& request) {
-                    std::cout << "POST body = [" << request.body << "]\n";
-                    std::cout << "POST body size = " << request.body.size() << "\n";
-
-                    return HttpResponse{
-                        200,
-                        "OK",
-                        {
-                            {"Content-type", "text/plain"}
-                        },
-                        "Received body: " + request.body + "\n"
-                    };
-                }
-            }
-        }
-    }
-};
-
-// Helper Functions
-bool pathExists(const std::string& path)
+Router::Router()
 {
-    for (const auto& [method, path_routes] : routes)
+    registerBuiltinRoutes();
+}
+
+bool Router::get(
+    const std::string& path,
+    Handler handler)
+{
+    return addRoute("GET", path, std::move(handler));
+}
+
+bool Router::post(
+    const std::string& path,
+    Handler handler)
+{
+    return addRoute("POST", path, std::move(handler));
+}
+
+bool Router::put(
+    const std::string& path,
+    Handler handler)
+{
+    return addRoute("PUT", path, std::move(handler));
+}
+
+bool Router::patch(
+    const std::string& path,
+    Handler handler)
+{
+    return addRoute("PATCH", path, std::move(handler));
+}
+
+bool Router::del(
+    const std::string& path,
+    Handler handler)
+{
+    return addRoute("DELETE", path, std::move(handler));
+}
+
+bool Router::addRoute(
+    const std::string& method,
+    const std::string& path,
+    Handler handler)
+{
+    // Application code cannot register server-owned routes.
+    if (isReservedRoute(path))
     {
-        if (path_routes.find(path) != path_routes.end())
+        return false;
+    }
+
+    auto& methodRoutes = routes[method];
+
+    // Do not allow duplicate routes.
+    if (methodRoutes.find(path) != methodRoutes.end())
+    {
+        return false;
+    }
+
+    methodRoutes[path] = std::move(handler);
+
+    return true;
+}
+
+void Router::registerBuiltinRoutes()
+{
+    // These routes belong to the HTTP server library.
+    // Applications cannot override them.
+
+    routes["GET"]["/__server/hello"] =
+        [](const HttpRequest&)
+        {
+            return HttpResponse{
+                200,
+                "OK",
+                {{"Content-Type", "text/plain"}},
+                "Hello from cpp-concurrent-server!\n"
+            };
+        };
+
+    routes["GET"]["/__server/status"] =
+        [](const HttpRequest&)
+        {
+            return HttpResponse{
+                200,
+                "OK",
+                {{"Content-Type", "text/plain"}},
+                "Server is running!\n"
+            };
+        };
+
+    routes["GET"]["/__server/slow"] =
+        [](const HttpRequest&)
+        {
+            std::cout << "Slow request: START\n";
+
+            std::this_thread::sleep_for(
+                std::chrono::seconds(5));
+
+            std::cout << "Slow request: END\n";
+
+            return HttpResponse{
+                200,
+                "OK",
+                {{"Content-Type", "text/plain"}},
+                "Slow request completed!\n"
+            };
+        };
+}
+
+bool Router::isReservedRoute(
+    const std::string& path) const
+{
+    constexpr const char* reservedPrefix =
+        "/__server/";
+
+    return path.rfind(reservedPrefix, 0) == 0;
+}
+
+bool Router::pathExists(
+    const std::string& path) const
+{
+    for (const auto& [method, pathRoutes] : routes)
+    {
+        if (pathRoutes.find(path) != pathRoutes.end())
         {
             return true;
         }
@@ -122,70 +138,64 @@ bool pathExists(const std::string& path)
     return false;
 }
 
-std::string getAllowedMethods(const std::string& path)
+std::string Router::getAllowedMethods(
+    const std::string& path) const
 {
-    std::vector<std::string> allowed_methods;
-
-    for (const auto& [method, path_routes] : routes)
-    {
-        if (path_routes.find(path) != path_routes.end())
-        {
-            allowed_methods.push_back(method);
-        }
-    }
-
     std::string result;
 
-    for (size_t i = 0; i < allowed_methods.size(); ++i)
+    for (const auto& [method, pathRoutes] : routes)
     {
-        if (i > 0)
-            result += ", ";
+        if (pathRoutes.find(path) != pathRoutes.end())
+        {
+            if (!result.empty())
+            {
+                result += ", ";
+            }
 
-        result += allowed_methods[i];
+            result += method;
+        }
     }
 
     return result;
 }
 
-HttpResponse routeRequest(const HttpRequest& request)
+HttpResponse Router::route(
+    const HttpRequest& request) const
 {
-    // Find the requested HTTP method
-    auto method_it = routes.find(request.method);
+    auto methodIt = routes.find(request.method);
 
-    if (method_it != routes.end())
+    if (methodIt != routes.end())
     {
-        // Get the routes registered for this method
-        const auto& path_routes = method_it->second;
+        const auto& pathRoutes = methodIt->second;
 
-        // Find the requested path
-        auto path_it = path_routes.find(request.path);
+        auto pathIt = pathRoutes.find(request.path);
 
-        if (path_it != path_routes.end())
+        if (pathIt != pathRoutes.end())
         {
-            // Execute the handler
-            return path_it->second(request);
+            return pathIt->second(request);
         }
     }
 
-    // Method Not Allowed
+    // Path exists, but requested HTTP method does not.
     if (pathExists(request.path))
     {
-        return {
+        return HttpResponse{
             405,
             "Method Not Allowed",
             {
-                {"Content-type", "text/plain"},
+                {"Content-Type", "text/plain"},
                 {"Allow", getAllowedMethods(request.path)}
             },
             "Method not allowed\n"
         };
     }
 
-    return {
+    // Neither path nor method exists.
+    return HttpResponse{
         404,
         "Not Found",
         {
-            {"Content-type", "text/plain"}
+            {"Content-Type", "text/plain"}
         },
         "Resource not found\n"
     };

@@ -25,8 +25,9 @@ namespace
     }
 }
 
-Server::Server(int port)
+Server::Server(int port, Router& router)
     : port(port),
+      router(router),
       pool(3)
 {
     setupSocket();
@@ -323,7 +324,7 @@ void Server::handleClient(int client_fd)
         }
 
         HttpResponse response =
-            routeRequest(request);
+            router.route(request);
 
         bool keep_alive =
             shouldKeepAlive(request);

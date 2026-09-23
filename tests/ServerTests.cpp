@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "server/Server.h"
+#include "http/Router.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -15,7 +16,24 @@ TEST(Server, HandlesGetRequestEndToEnd)
 {
     constexpr int port = 18080;
 
-    Server server(port);
+    Router router;
+
+    ASSERT_TRUE(
+        router.get(
+            "/api/hello",
+            [](const HttpRequest&)
+            {
+                return HttpResponse{
+                    200,
+                    "OK",
+                    {{"Content-Type", "text/plain"}},
+                    "Hello from MyBrary!\n"
+                };
+            }
+        )
+    );
+
+    Server server(port, router);
 
     std::thread server_thread([&server]()
     {
@@ -59,7 +77,7 @@ TEST(Server, HandlesGetRequestEndToEnd)
     );
 
     const std::string request =
-        "GET /hello HTTP/1.1\r\n"
+        "GET /api/hello HTTP/1.1\r\n"
         "Host: localhost\r\n"
         "Connection: close\r\n"
         "\r\n";
@@ -92,7 +110,7 @@ TEST(Server, HandlesGetRequestEndToEnd)
     );
 
     EXPECT_NE(
-        response.find("Hello"),
+        response.find("Hello from MyBrary!"),
         std::string::npos
     );
 
